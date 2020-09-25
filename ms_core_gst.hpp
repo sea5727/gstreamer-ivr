@@ -7,11 +7,147 @@
 #include <string>
 #include <vector>
 #include <utility>
+#include <thread>
+#include <chrono>
+#include <functional>
 
 using std::string;
 using std::vector;
 
 extern GMainLoop *loop;
+
+
+
+// void testf(const GstTagList * list, const gchar      * tag, gpointer           user_data)
+// {
+
+// }
+
+
+static 
+gboolean
+my_bus_callback (GstBus * bus, GstMessage * message, gpointer data)
+{
+    
+    
+    g_print ("Got %s message.. src:%s\n", GST_MESSAGE_TYPE_NAME (message), gst_element_get_name (message->src));
+
+    switch (GST_MESSAGE_TYPE (message)) {
+
+        case GST_MESSAGE_STATE_CHANGED:
+        {
+            GstState old_state;
+            GstState new_state;
+            GstState pending_state;
+            gst_message_parse_state_changed(message, &old_state, &new_state, &pending_state);
+            g_print("####### GST_MESSAGE_STATE_CHANGED.. old:%s, new:%s, pending:%s\n", 
+                gst_element_state_get_name (old_state), 
+                gst_element_state_get_name (new_state), 
+                gst_element_state_get_name (pending_state));
+            break;
+        }
+        case GST_MESSAGE_ERROR:
+        {
+            GError *err;
+            gchar *debug;
+
+            gst_message_parse_error (message, &err, &debug);
+            g_print ("########  Error: %s\n", err->message);
+            g_error_free (err);
+            g_free (debug);
+            break;
+        }
+        case GST_MESSAGE_EOS:
+            g_print ("########  GST_MESSAGE_EOS ############ \n");
+            break;
+        case GST_MESSAGE_ASYNC_DONE:
+        {
+            // gst_message_parse_async_done()
+            break;
+        }
+        case GST_MESSAGE_TAG:
+        {
+            GstTagList *tags = NULL;
+            gst_message_parse_tag(message, &tags);
+
+            auto lambdatest = [](const GstTagList * list, const gchar * tag, gpointer user_data){
+                GValue val = { 0, };
+                if(!gst_tag_list_copy_value(&val, list, tag))
+                    return;
+                gchar *str;
+                if (G_VALUE_HOLDS_STRING (&val))
+                    str = g_value_dup_string (&val);
+                else
+                    str = gst_value_serialize (&val);
+
+                g_print ("%s:%s\n", gst_tag_get_nick (tag), str);
+                g_free(str);
+
+                g_value_unset(&val);
+
+                // gint num = gst_tag_list_get_tag_size(list, tag);
+
+                // for(gint i = 0 ; i < num ; ++i)
+                // {
+                //     const GValue * val;
+                //     val = gst_tag_list_get_value_index(list, tag, i);
+                //     if (G_VALUE_HOLDS_STRING (val)) {
+                //         g_print ("    %s : %s \n", tag, g_value_get_string (val));
+                //     } else if (G_VALUE_HOLDS_UINT (val)) {
+                //         g_print ("    %s : %u \n", tag, g_value_get_uint (val));
+                //     } else if (G_VALUE_HOLDS_DOUBLE (val)) {
+                //         g_print ("    %s : %g \n", tag, g_value_get_double (val));
+                //     } else if (G_VALUE_HOLDS_BOOLEAN (val)) {
+                //         g_print ("    %s : %s \n", tag,
+                //         g_value_get_boolean (val) ? "true" : "false");
+                //     } else if (GST_VALUE_HOLDS_DATE_TIME (val)) {
+                //         GstDateTime *dt = (GstDateTime *)g_value_get_boxed (val);
+                //         gchar *dt_str = gst_date_time_to_iso8601_string (dt);
+
+                //         g_print ("    %s : %s \n", tag, dt_str);
+                //         g_free (dt_str);
+                //     } else {
+                //     g_print ("    %s : tag of type '%s' \n", tag, G_VALUE_TYPE_NAME (val));
+                //     }
+                // }
+
+
+                g_print("GstTagList:%s.. , tag:%s..\n", gst_tag_list_to_string(list), tag);
+            };
+            gst_tag_list_foreach(tags, lambdatest, NULL);
+
+            
+
+            break;
+        }
+        
+        default:
+        /* unhandled message */
+        break;
+    }
+
+    /* we want to be notified again the next time there is a message
+    * on the bus, so returning TRUE (FALSE means we want to stop watching
+    * for messages on the bus and our callback should not be called again)
+    */
+    return TRUE;
+}
+
+
+static void
+cb_state (GstBus * bus, GstMessage * message, gpointer data)
+{
+    g_print("cb_state start\n");
+  GstObject *pipe = GST_OBJECT (data);
+  GstState old, new_, pending;
+  gst_message_parse_state_changed (message, &old, &new_, &pending);
+  if (message->src == pipe) {
+    g_print ("Pipeline %s changed state from %s to %s\n",
+        GST_OBJECT_NAME (message->src),
+        gst_element_state_get_name (old), gst_element_state_get_name (new_));
+  }
+}
+
 
 namespace MsCore
 {
@@ -52,6 +188,51 @@ namespace MsCore
             , _audio_payload(0)
         {
 
+        }
+        void modify_element(std::string name, std::string field, string value)
+        {
+
+            std::cout << name << std::endl;
+            std::cout << field << std::endl;
+            std::cout << value << std::endl;
+            GstState state;
+            GstState pending;
+            GstStateChangeReturn ret;
+            ret = gst_element_get_state (pipeline, &state, &pending, -1);
+            std::cout << "current get state.. ret : " << ret << state << pending << std::endl;
+
+            GstElement * element
+                = gst_bin_get_by_name(GST_BIN(pipeline), name.c_str());
+            g_assert (element);
+
+            // ret = gst_element_set_state (pipeline, GST_STATE_PAUSED);
+
+
+            ret = gst_element_set_state (element, GST_STATE_READY);
+            // ret = gst_element_set_state (element, GST_STATE_READY);
+            g_object_set(element, field.c_str(), value.c_str(), NULL);
+            // ret = gst_element_set_state (element, GST_STATE_PAUSED);
+            std::this_thread::sleep_for(std::chrono::seconds(2));
+            ret = gst_element_set_state (pipeline, GST_STATE_READY);
+            ret = gst_element_set_state (pipeline, GST_STATE_PLAYING);
+
+
+            // ret = gst_element_set_state (pipeline, GST_STATE_PLAYING);
+        }
+        void make_pipeline_by_command(std::string command)
+        {
+            std::cout << "make_pipeline_by_command" << command.c_str() << std::endl;
+            pipeline = gst_parse_launch(command.c_str(), NULL);
+            g_assert(pipeline);
+
+            GstBus * bus = gst_pipeline_get_bus (GST_PIPELINE (pipeline));
+            g_assert(bus);
+            gst_bus_add_watch (bus, my_bus_callback, NULL);
+            gst_object_unref (bus);
+
+            /* Start playing */
+            gst_element_set_state (pipeline, GST_STATE_PLAYING);
+            std::cout << "make_pipeline_by_command end\n";
         }
 
         void replace(int data)

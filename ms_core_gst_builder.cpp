@@ -73,6 +73,18 @@ GstCoreBuilder & GstCoreBuilder::proc_rqnt_tone(int wave)
     return *this;
 }
 
+GstCoreBuilder & GstCoreBuilder::proc_by_command(const std::string command)
+{
+    std::cout << "proc_by_command" << command << std::endl;
+    gst_core->make_pipeline_by_command(std::move(command));
+    return *this;
+}
+GstCoreBuilder & GstCoreBuilder::proc_modify_pipeline(const string name, const string field, const string value)
+{
+    gst_core->modify_element(std::move(name), std::move(field), std::move(value));
+    return *this;
+}
+
 
 
 GstCoreBuilder & GstCoreBuilder::proc_make_tone()

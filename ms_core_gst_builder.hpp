@@ -5,6 +5,9 @@
 #include <utility>
 #include <memory>
 
+using std::string;
+using std::vector;
+
 namespace MsCore
 {
     class GstCoreBuilder
@@ -34,7 +37,10 @@ namespace MsCore
         GstCoreBuilder & proc_crcx_pipeline();
         /* service process */
         GstCoreBuilder & proc_rqnt_tone(int wave);
-
+        /* service process */
+        GstCoreBuilder & proc_by_command(const string command);
+        /* service process */
+        GstCoreBuilder & proc_modify_pipeline(const string name, const std::string field, const string value);
         /* setter */
         GstCoreBuilder & 
         set_file_location(vector<string> file_locations);

@@ -150,18 +150,41 @@ public:
         {
             std::cout << "start in type\n";
             const auto type = doc["type"].GetString();
-            if(strcmp(type, "command") == 0)
+            if(strcmp(type, "request") == 0)
             {
                 std::cout << "start command\n";
-
 
                 if(doc.HasMember("data"))
                 {
                     std::cout << "start data\n";
                     auto data = doc["data"].GetObject();
                     auto method = data.HasMember("method") ? data["method"].GetString() : "";
-                    if(strcmp(method, "crcx_pipeline") == 0)
+                    if(strcmp(method, "create_pipeline") == 0)
                     {
+                        if(data.HasMember("commandline"))
+                        {
+                            
+                            auto commandline = data["commandline"].GetString();
+                            std::string str_commandline(commandline, strlen(commandline));
+                            std::cout << "commandline:" << commandline << std::endl;
+                            std::cout << "commandline:" << str_commandline << std::endl;
+                            using MsCore::MsCore;
+                            if(auto thread_pool = MsCore::get_thread_pool())
+                            {
+                                if(auto io_service = thread_pool->get_io_service(0) )
+                                {
+                                    (*io_service).post([str_commandline]{
+                                        std::cout << "io_sevice start" << str_commandline << " \n";
+                                        MsCore::create()
+                                            .make_resource()
+                                            .proc_by_command(str_commandline);
+
+                                        std::cout << "proc_by_command end" << std::endl;
+                                    });
+                                }
+                            }
+                            return;
+                        }
                         // proc pipeline 
                         uint16_t        local_rtp_port;
                         std::string     remote_rtp_ip;
@@ -232,6 +255,40 @@ public:
                                 });
                             }
                         }
+                    }
+                    else if(strcmp(method, "modify_pipeline") == 0)
+                    {
+                        auto index = data.HasMember("index") ? data["index"].GetInt() : -1;
+                        if(data.HasMember("elements"))
+                        {
+                            auto elements = data["elements"].GetObject();
+
+                            auto name = elements["name"].GetString();
+                            std::string str_name(name, strlen(name));
+
+                            auto set = elements["set"].GetArray();
+                            std::vector<std::string> set_container;
+                            for(auto & s : set)
+                            {
+                                set_container.emplace_back(std::string(s.GetString(), s.GetStringLength()));
+                            }
+                            using MsCore::MsCore;
+                            if(auto thread_pool = MsCore::get_thread_pool())
+                            {
+                                if(auto io_service = thread_pool->get_io_service(0) )
+                                {
+                                    (*io_service).post([=]{
+                                        MsCore::create()
+                                            .get_resource(index)
+                                            .proc_modify_pipeline(str_name, set_container[0], set_container[1]);
+                                        std::cout << "proc_by_command end" << std::endl;
+                                    });
+                                }
+                            }
+
+                        }
+
+
                     }
                 
 

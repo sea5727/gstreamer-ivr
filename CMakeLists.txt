@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.0.0)
 project(gstreamer-media-server VERSION 0.1.0)
 
 if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 7.0)
-    message( FATAL_ERROR "You can not do this at all, CMake will exit... change your gcc version" )
+    # message( FATAL_ERROR "You can not do this at all, CMake will exit... change your gcc version" )
 endif()
 
 set(CMAKE_CXX_STANDARD 14)
