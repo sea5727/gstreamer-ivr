@@ -32,7 +32,7 @@ endif()
 find_package(cpprestsdk REQUIRED)
 
 include_directories( /usr/local/boost/include/)
-link_directories( /usr/local/boost/lib/)
+link_directories( /usr/local/lib64 /usr/local/gcc/lib64 /usr/local/boost/lib/)
 link_libraries(pthread boost_thread oops)
 
 
@@ -41,7 +41,8 @@ add_executable(gstreamer-media-server
                 ms_hmp_server.cpp
                 ms_core_gst.cpp
                 ms_core_gst_builder.cpp)
-add_dependencies(gstreamer-media-server oops)
+add_dependencies(gstreamer-media-server 
+                oops)
 target_link_libraries(gstreamer-media-server cpprestsdk::cpprest ssl crypto)
 
 

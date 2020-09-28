@@ -17,11 +17,37 @@ using std::vector;
 extern GMainLoop *loop;
 
 
+extern GstElement * filesrc_t;
+extern GstElement * queue_t;
+extern GstElement * wavparse_t;
+extern GstElement * alawdec_t;
+extern GstElement * amrnbenc_t;
+extern GstElement * rtpamrpay_t;
+extern GstElement * udpsink_t;
+
 
 // void testf(const GstTagList * list, const gchar      * tag, gpointer           user_data)
 // {
 
 // }
+
+
+
+static gboolean
+cb_print_position (GstElement *pipeline)
+{
+  gint64 pos, len;
+
+  if (gst_element_query_position (pipeline, GST_FORMAT_TIME, &pos)
+    && gst_element_query_duration (pipeline, GST_FORMAT_TIME, &len)) {
+    g_print ("Time: %" GST_TIME_FORMAT " / %" GST_TIME_FORMAT "\r",
+         GST_TIME_ARGS (pos), GST_TIME_ARGS (len));
+  }
+
+  /* call me again */
+  return TRUE;
+}
+
 
 
 static 
@@ -30,7 +56,7 @@ my_bus_callback (GstBus * bus, GstMessage * message, gpointer data)
 {
     
     
-    g_print ("Got %s message.. src:%s\n", GST_MESSAGE_TYPE_NAME (message), gst_element_get_name (message->src));
+    g_print ("############# Got %s message.. src:%s\n", GST_MESSAGE_TYPE_NAME (message), gst_element_get_name (message->src));
 
     switch (GST_MESSAGE_TYPE (message)) {
 
@@ -40,10 +66,11 @@ my_bus_callback (GstBus * bus, GstMessage * message, gpointer data)
             GstState new_state;
             GstState pending_state;
             gst_message_parse_state_changed(message, &old_state, &new_state, &pending_state);
-            g_print("####### GST_MESSAGE_STATE_CHANGED.. old:%s, new:%s, pending:%s\n", 
-                gst_element_state_get_name (old_state), 
-                gst_element_state_get_name (new_state), 
-                gst_element_state_get_name (pending_state));
+            // g_print("####### GST_MESSAGE_STATE_CHANGED.. old:%s, new:%s, pending:%s\n", 
+            //     gst_element_state_get_name (old_state), 
+            //     gst_element_state_get_name (new_state), 
+            //     gst_element_state_get_name (pending_state));
+
             break;
         }
         case GST_MESSAGE_ERROR:
@@ -120,6 +147,49 @@ my_bus_callback (GstBus * bus, GstMessage * message, gpointer data)
 
             break;
         }
+        case GST_MESSAGE_STREAM_STATUS:
+        {
+            GstStreamStatusType type;
+            GstElement *owner;
+            const GValue *val;
+            gchar *path;
+            GstTask *task = NULL;
+            gst_message_parse_stream_status(message, &type, &owner);
+
+            val = gst_message_get_stream_status_object (message);
+   
+            g_print ("type:   %d", type);
+            path = gst_object_get_path_string (GST_MESSAGE_SRC (message));
+            g_print ("source: %s", path);
+            g_free (path);
+            path = gst_object_get_path_string (GST_OBJECT (owner));
+            g_print ("owner:  %s", path);
+            g_free (path);
+            g_print ("object: type %s, value %p", G_VALUE_TYPE_NAME (val), g_value_get_object (val));
+   
+            /* see if we know how to deal with this object */
+            if (G_VALUE_TYPE (val) == GST_TYPE_TASK) {
+              task = (GstTask *)g_value_get_object (val);
+            }
+   
+            switch (type) {
+              case GST_STREAM_STATUS_TYPE_CREATE:
+                g_print ("GST_STREAM_STATUS_TYPE_CREATE ... created task %p", task);
+                break;
+              case GST_STREAM_STATUS_TYPE_ENTER:
+                g_print ("GST_STREAM_STATUS_TYPE_ENTER .. created task %p", task);
+                /* g_message ("raising task priority"); */
+                /* setpriority (PRIO_PROCESS, 0, -10); */
+                break;
+              case GST_STREAM_STATUS_TYPE_LEAVE:
+                g_print ("GST_STREAM_STATUS_TYPE_LEAVE .. created task %p", task);
+                break;
+              default:
+                g_print ("default .. created task %p", task);
+                break;
+            }
+            break;
+        }
         
         default:
         /* unhandled message */
@@ -191,36 +261,274 @@ namespace MsCore
         }
         void modify_element(std::string name, std::string field, string value)
         {
+            GstClockTime starttime = gst_element_get_start_time(filesrc_t);
+            GstClockTime basetime = gst_element_get_base_time(filesrc_t);
+            g_print("starttime : %"GST_TIME_FORMAT"\n", GST_TIME_ARGS(starttime));
+            g_print("basetime : %"GST_TIME_FORMAT"\n", GST_TIME_ARGS(basetime));
+            GST_ERROR("This is modify_element start\n");
 
-            std::cout << name << std::endl;
-            std::cout << field << std::endl;
-            std::cout << value << std::endl;
-            GstState state;
-            GstState pending;
-            GstStateChangeReturn ret;
-            ret = gst_element_get_state (pipeline, &state, &pending, -1);
-            std::cout << "current get state.. ret : " << ret << state << pending << std::endl;
-
-            GstElement * element
-                = gst_bin_get_by_name(GST_BIN(pipeline), name.c_str());
-            g_assert (element);
-
-            // ret = gst_element_set_state (pipeline, GST_STATE_PAUSED);
+            
+            gst_element_set_state (pipeline, GST_STATE_PAUSED);
+            
+            // std::cout << "gst_element_seek_simple start\n";
+            
+            // gst_element_seek_simple (pipeline, GST_FORMAT_TIME, (GstSeekFlags)(GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_KEY_UNIT), 0 );
+            gst_element_seek_simple (pipeline, GST_FORMAT_TIME, (GstSeekFlags)(GST_SEEK_FLAG_KEY_UNIT | GST_SEEK_FLAG_SEGMENT), 0 );
 
 
-            ret = gst_element_set_state (element, GST_STATE_READY);
-            // ret = gst_element_set_state (element, GST_STATE_READY);
-            g_object_set(element, field.c_str(), value.c_str(), NULL);
-            // ret = gst_element_set_state (element, GST_STATE_PAUSED);
-            std::this_thread::sleep_for(std::chrono::seconds(2));
-            ret = gst_element_set_state (pipeline, GST_STATE_READY);
-            ret = gst_element_set_state (pipeline, GST_STATE_PLAYING);
+            // pipeline->start_time
+            std::cout << "filesrc_t GST_STATE_READY\n";
+            // gst_element_set_state (wavparse_t, GST_STATE_READY);
+            gst_element_set_state (filesrc_t, GST_STATE_NULL);
+            
+            g_object_set(filesrc_t, field.c_str(), value.c_str(), NULL);
+            
+            
+            gst_element_sync_state_with_parent(filesrc_t);
+
+            std::cout << "filesrc_t GST_STATE_PLAYING\n";
+            // std::cout << "pipeline GST_STATE_PLAYING\n";
+            gst_element_set_state (pipeline, GST_STATE_PLAYING);
+            GST_ERROR("This is modify_element end\n");
+            
+            GstClockTime starttime2 = gst_element_get_start_time(filesrc_t);
+            GstClockTime basetime2 = gst_element_get_base_time(filesrc_t);
+            g_print("starttime2 : %"GST_TIME_FORMAT"\n", GST_TIME_ARGS(starttime2));
+            g_print("basetime2 : %"GST_TIME_FORMAT"\n", GST_TIME_ARGS(basetime2));
 
 
-            // ret = gst_element_set_state (pipeline, GST_STATE_PLAYING);
+            return;
+            std::cout << "######### start########## \n";
+
+            std::cout << "######### GST_STATE_PAUSED ########## \n";
+            gst_element_set_state (pipeline, GST_STATE_PAUSED);
+            std::cout << "######### gst_bin_remove ########## \n";
+            // gst_element_unlink(filesrc, wavparse);
+            gst_bin_remove(GST_BIN(pipeline), filesrc_t);
+            std::cout << "######### gst_bin_remove 2 ########## \n";
+            gst_bin_remove(GST_BIN(pipeline), wavparse_t);
+            
+            GstElement * new_filesrc = gst_element_factory_make ("filesrc", "filesrc_1");
+            g_assert (new_filesrc);
+            g_object_set(new_filesrc, field.c_str(), value.c_str(), NULL);
+            GstElement * new_wavparse = gst_element_factory_make ("wavparse", "wavparse_1");
+            g_assert (new_wavparse);
+            gst_bin_add_many(GST_BIN (pipeline), new_filesrc, new_wavparse, NULL);
+
+            if (!gst_element_link_many (new_filesrc, new_wavparse, alawdec_t, NULL)) {
+                g_error ("Failed to link audiosrc, audioconv, audioresample, "
+                    "audio encoder and audio payloader");
+            }
+
+            std::cout << "######### pipeline GST_STATE_PLAYING########## \n";
+            gst_element_set_state (pipeline, GST_STATE_PLAYING);
+
+            std::cout << "######### end ########## \n";
+            return;
+            // std::cout << name << std::endl;
+            // std::cout << field << std::endl;
+            // std::cout << value << std::endl;
+            // GstState state;
+            // GstState pending;
+            // GstStateChangeReturn ret;
+            // ret = gst_element_get_state (pipeline, &state, &pending, -1);
+            // std::cout << "current get state.. ret : " << ret << state << pending << std::endl;
+
+            // GST_ERROR("This is modify_element start\n");
+            // GstElement * filesrc
+            //     = gst_bin_get_by_name(GST_BIN(pipeline), name.c_str());
+            // g_assert (filesrc);
+
+            // GstElement * wavparse
+            //     = gst_bin_get_by_name(GST_BIN(pipeline), "wavparse");
+            // g_assert (wavparse);
+
+
+            // std::cout << "start GST_STATE_PAUSED??\n";
+            // gst_element_set_state (pipeline, GST_STATE_PAUSED);
+            // std::cout << "start GST_STATE_READY??\n";
+            // // gst_element_set_state(wavparse, GST_STATE_READY);
+            // // g_assert (nullptr);
+            // std::cout << "start gst_element_unlink??\n";
+
+            // gst_element_unlink(filesrc, wavparse);
+            // gst_bin_remove(GST_BIN(pipeline), filesrc);
+
+            // std::cout << "start gst_bin_remove3??\n";
+            // GstState TestState;
+            // gst_element_get_state(filesrc, &TestState, NULL, GST_CLOCK_TIME_NONE);
+            // std::clog << "########## FIRST TestState: " << gst_element_state_get_name(TestState) << std::endl;
+
+
+            // GstElement * new_filesrc = gst_element_factory_make ("filesrc", "filesrc_1");
+            // g_assert (new_filesrc);
+
+            // g_object_set(new_filesrc, field.c_str(), value.c_str(), NULL);
+
+            // std::cout << "start gst_bin_add_many\n";
+            // gst_bin_add(GST_BIN (pipeline), new_filesrc);
+
+
+
+            // std::this_thread::sleep_for(std::chrono::seconds(1));
+
+
+            // if (!gst_element_link_many (new_filesrc, wavparse, NULL)) {
+            //     g_error ("Failed to link audiosrc, audioconv, audioresample, "
+            //         "audio encoder and audio payloader");
+            // }
+
+            // gst_element_set_state ( wavparse, GST_STATE_PAUSED);
+            // gst_element_set_state  (filesrc, GST_STATE_PLAYING);
+
+            //  gst_element_set_state (pipeline, GST_STATE_PLAYING);
+
+            //  GST_ERROR("This is modify_element end\n");
+
+
+            // std::cout << "start sleep\n";
+            // std::this_thread::sleep_for(std::chrono::seconds(2));
+            // std::cout << "start cb_print_position..\n";
+            // cb_print_position(pipeline);
+            // std::cout << "end cb_print_position..\n";
+            // gint64 duration;
+            // GstQuery *query;
+            // gboolean res;
+            // query = gst_query_new_duration (GST_FORMAT_TIME);
+            // res = gst_element_query (pipeline, query);
+            // if (res) {
+            //     gint64 duration;
+            //     gst_query_parse_duration (query, NULL, &duration);
+            //     g_print ("duration = %"GST_TIME_FORMAT, GST_TIME_ARGS (duration));
+            // } else {
+            //     g_print ("duration query failed...");
+            // }
+            // gst_query_unref (query);
+
+
+#if 0
+            GstBus *bus = gst_pipeline_get_bus(GST_PIPELINE(pipeline));
+            GstMessage* eosmsg = gst_message_new_eos(GST_OBJECT(pipeline));
+            gst_bus_post(bus, eosmsg);
+            g_object_unref(bus);
+#endif
+
         }
         void make_pipeline_by_command(std::string command)
         {
+#if 0
+            GstElement * audiotestsrc;
+            GstElement * audioconvert;
+            GstElement * amrnbenc;
+            GstElement * rtpamrpay;
+            GstElement * udpsink;
+
+            pipeline = gst_pipeline_new (NULL);
+            g_assert (pipeline);
+
+            audiotestsrc = gst_element_factory_make ("audiotestsrc", "audiotestsrc_0");
+            g_assert (audiotestsrc);
+
+            audioconvert = gst_element_factory_make ("audioconvert", "audioconvert");
+            g_assert (audioconvert);
+
+            amrnbenc = gst_element_factory_make ("amrnbenc", "amrnbenc");
+            g_assert (amrnbenc);
+
+            rtpamrpay = gst_element_factory_make ("rtpamrpay", "rtpamrpay");
+            g_assert (rtpamrpay);
+
+            g_object_set (rtpamrpay, "pt", 104, NULL);
+
+
+            udpsink = gst_element_factory_make ("udpsink", "udpsink");
+            g_assert (udpsink);
+
+
+                
+            g_object_set (udpsink, "host", "192.168.0.4", NULL);
+            g_object_set (udpsink, "port", 5000, NULL);
+
+
+            /* add capture and payloading to the pipeline and link */
+            gst_bin_add_many (GST_BIN (pipeline), audiotestsrc, audioconvert, amrnbenc, rtpamrpay, udpsink, NULL);
+
+            if (!gst_element_link_many (audiotestsrc, audioconvert, amrnbenc, rtpamrpay, udpsink, NULL)) {
+                g_error ("Failed to link audiosrc, audioconv, audioresample, "
+                    "audio encoder and audio payloader");
+            }
+
+            /* set the pipeline to playing */
+            g_print ("starting sender pipeline\n");
+            gst_element_set_state (pipeline, GST_STATE_PLAYING);
+#endif
+#if 1
+//"rtpbin name=rtpbin filesrc name=filesrc_0 location=/home/ysh8361/BCN3009999990.wav !  
+// wavparse name=wavparse_0 ! 
+//alawdec name=alawdec_0 ! 
+//amrnbenc ! 
+//rtpamrpay pt=104 !  
+//rtpbin.send_rtp_sink_0 ;rtpbin.send_rtp_src_0 ! udpsink async=false host=192.168.0.4 port=5000"
+            // GstElement * filesrc;
+            // GstElement * wavparse;
+            // GstElement * alawdec;
+            // GstElement * amrnbenc;
+            // GstElement * rtpamrpay;
+            // GstElement * udpsink;
+
+            pipeline = gst_pipeline_new (NULL);
+            g_assert (pipeline);
+
+            filesrc_t = gst_element_factory_make ("filesrc", "filesrc");
+            g_object_set (filesrc_t, "location", "/home/ysh8361/BCN3009999990.wav", NULL);
+            g_assert (filesrc_t);
+
+            queue_t = gst_element_factory_make("queue", "queue");
+            g_assert (queue_t);
+
+            wavparse_t = gst_element_factory_make ("wavparse", "wavparse");
+            g_assert (wavparse_t);
+
+            alawdec_t = gst_element_factory_make ("alawdec", "alawdec");
+            g_assert (alawdec_t);
+
+            amrnbenc_t = gst_element_factory_make ("amrnbenc", "amrnbenc");
+            g_assert (amrnbenc_t);
+
+            rtpamrpay_t = gst_element_factory_make ("rtpamrpay", "rtpamrpay");
+            g_assert (rtpamrpay_t);
+
+            g_object_set (rtpamrpay_t, "pt", 104, NULL);
+
+
+            udpsink_t = gst_element_factory_make ("udpsink", "udpsink");
+            g_assert (udpsink_t);
+
+            g_object_set (udpsink_t, "host", "192.168.0.4", NULL);
+            g_object_set (udpsink_t, "port", 5000, NULL);
+
+
+            /* add capture and payloading to the pipeline and link */
+            gst_bin_add_many (GST_BIN (pipeline), filesrc_t, queue_t, wavparse_t, alawdec_t, amrnbenc_t, rtpamrpay_t, udpsink_t, NULL);
+
+            if (!gst_element_link_many (filesrc_t, queue_t, wavparse_t, alawdec_t, amrnbenc_t, rtpamrpay_t, udpsink_t, NULL)) {
+                g_error ("Failed to link audiosrc, audioconv, audioresample, "
+                    "audio encoder and audio payloader");
+            }
+
+
+            GstBus * bus = gst_pipeline_get_bus (GST_PIPELINE (pipeline));
+            g_assert(bus);
+            gst_bus_add_watch (bus, my_bus_callback, NULL);
+            gst_object_unref (bus);
+
+            g_timeout_add (200, (GSourceFunc) cb_print_position, pipeline);
+
+            /* set the pipeline to playing */
+            g_print ("starting sender pipeline\n");
+            gst_element_set_state (pipeline, GST_STATE_PLAYING);
+#endif
+#if 0
             std::cout << "make_pipeline_by_command" << command.c_str() << std::endl;
             pipeline = gst_parse_launch(command.c_str(), NULL);
             g_assert(pipeline);
@@ -230,9 +538,14 @@ namespace MsCore
             gst_bus_add_watch (bus, my_bus_callback, NULL);
             gst_object_unref (bus);
 
+
+            g_timeout_add (200, (GSourceFunc) cb_print_position, pipeline);
+
+            
             /* Start playing */
             gst_element_set_state (pipeline, GST_STATE_PLAYING);
             std::cout << "make_pipeline_by_command end\n";
+#endif
         }
 
         void replace(int data)

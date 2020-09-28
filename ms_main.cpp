@@ -43,6 +43,18 @@ proc_demo(const char *host);
 // _TOOL	_HMP_TOOLS[MAX_TOOL];
 
 GMainLoop *loop;
+
+
+GstElement * filesrc_t;
+GstElement * queue_t;
+GstElement * wavparse_t;
+GstElement * alawdec_t;
+GstElement * amrnbenc_t;
+GstElement * rtpamrpay_t;
+GstElement * udpsink_t;
+
+
+
 unsigned int _current_mem_index = 0;
 _ST_PIPELINE    _PIPELINE_MEM[3000];
 _ST_DATA_       _DATA_MEM[3000];
