@@ -2,6 +2,7 @@
 #define __MS_GST_BUILDER_HPP__
 
 #include <gst/gst.h>
+#include <gst/audio/audio.h>
 #include <algorithm>
 #include <iostream>
 #include <string>
@@ -18,7 +19,9 @@ extern GMainLoop *loop;
 
 
 extern GstElement * filesrc_t;
+extern GstElement * app_source_t;
 extern GstElement * queue_t;
+extern GstElement * identity_t;
 extern GstElement * wavparse_t;
 extern GstElement * alawdec_t;
 extern GstElement * amrnbenc_t;
@@ -26,11 +29,69 @@ extern GstElement * rtpamrpay_t;
 extern GstElement * udpsink_t;
 
 
-// void testf(const GstTagList * list, const gchar      * tag, gpointer           user_data)
-// {
 
-// }
+/* This method is called by the idle GSource in the mainloop, to feed CHUNK_SIZE bytes into appsrc.
+ * The idle handler is added to the mainloop when appsrc requests us to start sending data (need-data signal)
+ * and is removed when appsrc has enough data (enough-data signal).
+ */
+static gboolean push_data (gpointer data) {
+    // GstBuffer *buffer;
+    // GstFlowReturn ret;
+    // int i;
+    // GstMapInfo map;
+    // gint16 *raw;
+    // gint num_samples = CHUNK_SIZE / 2; /* Because each sample is 16 bits */
+    // gfloat freq;
 
+    // /* Create a new empty buffer */
+    // buffer = gst_buffer_new_and_alloc (CHUNK_SIZE);
+
+    // /* Set its timestamp and duration */
+    // GST_BUFFER_TIMESTAMP (buffer) = gst_util_uint64_scale (data->num_samples, GST_SECOND, SAMPLE_RATE);
+    // GST_BUFFER_DURATION (buffer) = gst_util_uint64_scale (num_samples, GST_SECOND, SAMPLE_RATE);
+
+    // /* Generate some psychodelic waveforms */
+    // gst_buffer_map (buffer, &map, GST_MAP_WRITE);
+    // raw = (gint16 *)map.data;
+    // data->c += data->d;
+    // data->d -= data->c / 1000;
+    // freq = 1100 + 1000 * data->d;
+    // for (i = 0; i < num_samples; i++) {
+    //     data->a += data->b;
+    //     data->b -= data->a / freq;
+    //     raw[i] = (gint16)(500 * data->a);
+    // }
+    // gst_buffer_unmap (buffer, &map);
+    // data->num_samples += num_samples;
+
+    // /* Push the buffer into the appsrc */
+    // g_signal_emit_by_name (data->app_source, "push-buffer", buffer, &ret);
+
+    // /* Free the buffer now that we are done with it */
+    // gst_buffer_unref (buffer);
+
+    // if (ret != GST_FLOW_OK) {
+    //     /* We got some error, stop sending data */
+    //     return FALSE;
+    // }
+
+    return TRUE;
+}
+
+
+/* This signal callback triggers when appsrc needs data. Here, we add an idle handler
+ * to the mainloop to start pushing data into the appsrc */
+static void start_feed (GstElement *source, guint size, gpointer data) {
+    g_print ("Start feeding\n");
+    guint sourceid = g_idle_add ((GSourceFunc) push_data, data);
+}
+
+/* This callback triggers when appsrc has enough data and we can stop sending.
+ * We remove the idle handler from the mainloop */
+static void stop_feed (GstElement *source, gpointer data) {
+    g_print ("Stop feeding\n");
+    // g_source_remove (data->sourceid);
+}
 
 
 static gboolean
@@ -55,7 +116,7 @@ gboolean
 my_bus_callback (GstBus * bus, GstMessage * message, gpointer data)
 {
     
-    
+    GstElement * pipeline = (GstElement *)data;
     g_print ("############# Got %s message.. src:%s\n", GST_MESSAGE_TYPE_NAME (message), gst_element_get_name (message->src));
 
     switch (GST_MESSAGE_TYPE (message)) {
@@ -147,6 +208,22 @@ my_bus_callback (GstBus * bus, GstMessage * message, gpointer data)
 
             break;
         }
+        case GST_MESSAGE_RESET_TIME:
+        {
+            GstClockTime clocktime;
+            gst_message_parse_reset_time(message, &clocktime);
+            g_print("GST_MESSAGE_RESET_TIME : %"GST_TIME_FORMAT"\n", GST_TIME_ARGS(clocktime));
+            break;
+        }
+        case GST_MESSAGE_SEGMENT_DONE:
+        {
+            GstFormat format;
+            gint64 position;
+            gst_message_parse_segment_done(message, &format, &position);
+            g_print("GST_MESSAGE_SEGMENT_DONE : format:%d, position:%d\n", format, position);
+            gst_element_seek(pipeline, 1, GST_FORMAT_TIME, (GstSeekFlags)(GST_SEEK_FLAG_SEGMENT), GST_SEEK_TYPE_SET, 0, GST_SEEK_TYPE_END, 0);
+            break;
+        }
         case GST_MESSAGE_STREAM_STATUS:
         {
             GstStreamStatusType type;
@@ -190,7 +267,24 @@ my_bus_callback (GstBus * bus, GstMessage * message, gpointer data)
             }
             break;
         }
-        
+
+        case GST_MESSAGE_WARNING:
+        {
+            GError *gerror;
+            gchar *debug;
+
+            if(message->type == GST_MESSAGE_ERROR)
+                gst_message_parse_error(message, &gerror, &debug);
+            else
+                gst_message_parse_warning(message, &gerror, &debug);
+
+            gst_object_default_error(GST_MESSAGE_SRC(message), gerror, debug);
+            g_error_free(gerror);
+            g_free(debug);
+            
+            break;
+        }
+
         default:
         /* unhandled message */
         break;
@@ -261,6 +355,18 @@ namespace MsCore
         }
         void modify_element(std::string name, std::string field, string value)
         {
+
+            // gst_element_set_state(pipeline, GST_STATE_PAUSED);
+            // gst_element_get_state(pipeline, NULL, NULL, GST_CLOCK_TIME_NONE);
+            gst_element_seek(pipeline, 1, GST_FORMAT_TIME, (GstSeekFlags)(GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_SEGMENT), GST_SEEK_TYPE_SET, 0, GST_SEEK_TYPE_END, 0);
+            
+            // gst_element_set_state (pipeline, GST_STATE_PLAYING);
+            // gst_element_get_state(pipeline, NULL, NULL, GST_CLOCK_TIME_NONE);
+
+
+            // gst_element_seek_simple (pipeline, GST_FORMAT_TIME, (GstSeekFlags)(GST_SEEK_FLAG_KEY_UNIT | GST_SEEK_FLAG_FLUSH), 0 );
+
+            return ;
             GstClockTime starttime = gst_element_get_start_time(filesrc_t);
             GstClockTime basetime = gst_element_get_base_time(filesrc_t);
             g_print("starttime : %"GST_TIME_FORMAT"\n", GST_TIME_ARGS(starttime));
@@ -279,7 +385,7 @@ namespace MsCore
             // pipeline->start_time
             std::cout << "filesrc_t GST_STATE_READY\n";
             // gst_element_set_state (wavparse_t, GST_STATE_READY);
-            gst_element_set_state (filesrc_t, GST_STATE_NULL);
+            gst_element_set_state (filesrc_t, GST_STATE_READY);
             
             g_object_set(filesrc_t, field.c_str(), value.c_str(), NULL);
             
@@ -288,6 +394,7 @@ namespace MsCore
 
             std::cout << "filesrc_t GST_STATE_PLAYING\n";
             // std::cout << "pipeline GST_STATE_PLAYING\n";
+            gst_element_set_state (filesrc_t, GST_STATE_PLAYING);
             gst_element_set_state (pipeline, GST_STATE_PLAYING);
             GST_ERROR("This is modify_element end\n");
             
@@ -480,8 +587,24 @@ namespace MsCore
             g_assert (pipeline);
 
             filesrc_t = gst_element_factory_make ("filesrc", "filesrc");
-            g_object_set (filesrc_t, "location", "/home/ysh8361/BCN3009999990.wav", NULL);
+            g_object_set (filesrc_t, "location", "/home/jdin/BCN3009999990.wav", NULL);
             g_assert (filesrc_t);
+
+
+            app_source_t = gst_element_factory_make ("appsrc", "audio_source");
+            g_assert (app_source_t);
+
+            GstAudioInfo info;
+
+            gint sample_rate = 44100 ;
+            gst_audio_info_set_format (&info, GST_AUDIO_FORMAT_S16, sample_rate, 1, NULL);
+            GstCaps * audio_caps = gst_audio_info_to_caps (&info);
+            g_object_set (app_source_t, "caps", audio_caps, "format", GST_FORMAT_TIME, NULL);
+            g_signal_connect (app_source_t, "need-data", G_CALLBACK (start_feed), NULL);
+            g_signal_connect (app_source_t, "enough-data", G_CALLBACK (stop_feed), NULL);
+
+            gst_caps_unref (audio_caps);
+
 
             queue_t = gst_element_factory_make("queue", "queue");
             g_assert (queue_t);
@@ -492,26 +615,31 @@ namespace MsCore
             alawdec_t = gst_element_factory_make ("alawdec", "alawdec");
             g_assert (alawdec_t);
 
+            identity_t = gst_element_factory_make("identity", "identity");
+            g_object_set (identity_t, "single-segment", true, NULL);
+            g_assert (identity_t);
+
             amrnbenc_t = gst_element_factory_make ("amrnbenc", "amrnbenc");
             g_assert (amrnbenc_t);
 
             rtpamrpay_t = gst_element_factory_make ("rtpamrpay", "rtpamrpay");
             g_assert (rtpamrpay_t);
 
+            // g_object_set (rtpamrpay_t, "perfect-rtptime", true, NULL);
             g_object_set (rtpamrpay_t, "pt", 104, NULL);
 
 
             udpsink_t = gst_element_factory_make ("udpsink", "udpsink");
             g_assert (udpsink_t);
 
-            g_object_set (udpsink_t, "host", "192.168.0.4", NULL);
+            g_object_set (udpsink_t, "host", "192.168.0.219", NULL);
             g_object_set (udpsink_t, "port", 5000, NULL);
 
 
             /* add capture and payloading to the pipeline and link */
-            gst_bin_add_many (GST_BIN (pipeline), filesrc_t, queue_t, wavparse_t, alawdec_t, amrnbenc_t, rtpamrpay_t, udpsink_t, NULL);
+            gst_bin_add_many (GST_BIN (pipeline), filesrc_t, queue_t, identity_t, wavparse_t, alawdec_t, amrnbenc_t, rtpamrpay_t, udpsink_t, NULL);
 
-            if (!gst_element_link_many (filesrc_t, queue_t, wavparse_t, alawdec_t, amrnbenc_t, rtpamrpay_t, udpsink_t, NULL)) {
+            if (!gst_element_link_many (filesrc_t, queue_t, identity_t, wavparse_t, alawdec_t, amrnbenc_t, rtpamrpay_t, udpsink_t, NULL)) {
                 g_error ("Failed to link audiosrc, audioconv, audioresample, "
                     "audio encoder and audio payloader");
             }
@@ -519,7 +647,7 @@ namespace MsCore
 
             GstBus * bus = gst_pipeline_get_bus (GST_PIPELINE (pipeline));
             g_assert(bus);
-            gst_bus_add_watch (bus, my_bus_callback, NULL);
+            gst_bus_add_watch (bus, my_bus_callback, pipeline);
             gst_object_unref (bus);
 
             g_timeout_add (200, (GSourceFunc) cb_print_position, pipeline);

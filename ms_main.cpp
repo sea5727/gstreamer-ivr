@@ -46,7 +46,9 @@ GMainLoop *loop;
 
 
 GstElement * filesrc_t;
+GstElement * app_source_t;
 GstElement * queue_t;
+GstElement * identity_t;
 GstElement * wavparse_t;
 GstElement * alawdec_t;
 GstElement * amrnbenc_t;
