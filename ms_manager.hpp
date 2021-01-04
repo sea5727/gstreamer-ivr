@@ -10,7 +10,8 @@ namespace MediaServer
         std::string name = "MediaServer";
         Manager() {
             try{
-                logger = spdlog::basic_logger_mt("MediaServer", "log/MediaServer.log");
+                // logger = spdlog::basic_logger_mt("MediaServer", "log/MediaServer.log");
+                logger = spdlog::stdout_color_mt("MediaServer");  
                 spdlog::flush_on(spdlog::level::debug);
                 logger->set_level(spdlog::level::debug);
                 logger->info("======== {} START ===========", name);

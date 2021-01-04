@@ -35,7 +35,7 @@ find_package(cpprestsdk REQUIRED)
 
 include_directories( /usr/local/boost/include/ /usr/include/gstreamer-1.0 )
 link_directories( /usr/local/lib64 /usr/local/gcc/lib64 /usr/local/boost/lib/)
-link_libraries(pthread boost_thread)
+link_libraries(pthread boost_thread spdlog)
 
 
 # add_executable(gstreamer-media-server 

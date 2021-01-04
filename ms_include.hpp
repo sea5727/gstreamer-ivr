@@ -6,7 +6,7 @@
 #include <thread>
 
 #include <gst/gst.h>
-
+#include <gio/gio.h>
 #include <boost/bind/bind.hpp>
 #include <boost/asio.hpp>
 #include <boost/asio/ip/tcp.hpp>
@@ -15,6 +15,7 @@
 
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/basic_file_sink.h>
+#include <spdlog/sinks/stdout_color_sinks.h>
 
 #include "ms_manager.hpp"
 #include "ms_gstreamer_core.hpp"

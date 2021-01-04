@@ -39,18 +39,6 @@ namespace MediaServer
                                         handle_new_connection(handler, error);
                                     });
 
-            auto timer_test_1 = std::make_shared<boost::asio::deadline_timer>(io_service);
-            timer_test_1->expires_from_now(boost::posix_time::seconds(1));
-            timer_test_1->async_wait([timer_test_1](const boost::system::error_code & error){
-                std::cout << "timer_test_1 start" << std::endl;
-            });
-
-            auto timer_test_2 = std::make_shared<boost::asio::deadline_timer>(io_service);
-            timer_test_2->expires_from_now(boost::posix_time::seconds(2));
-            timer_test_2->async_wait([timer_test_2](const boost::system::error_code & error){
-                std::cout << "timer_test_2 start" << std::endl;
-            });
-
         }
 
 
@@ -60,10 +48,10 @@ namespace MediaServer
             if(error) {
                 throw std::runtime_error("TODO handle_new_connection error ");
             }
+            
             handler->start();
             auto new_handler = std::make_shared<TcpHandler>(io_service);
 
-            std::cout << "try new accept" << std::endl;
             acceptor.async_accept( new_handler->socket(), 
                                     [=](const boost::system::error_code & error_code) {
                                         handle_new_connection(new_handler, error_code);

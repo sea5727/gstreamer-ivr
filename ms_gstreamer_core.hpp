@@ -7,20 +7,23 @@ namespace MediaServer
     class GstreamerCore{
     public:
         static std::array<std::shared_ptr<GstreamerCore>, 10000> CoreList;
+        Manager & pm = Manager::getInstance();
         unsigned long ssrc;
         uint16_t payload;
         uint16_t bindport;
         std::string remoteip;
         uint16_t port;
         std::string codec;
-        
         GstElement * pipeline;
 
     public:
         GstreamerCore() = default;
 
         void
-        GstParseLaunch(const std::string & command){
+        GstParseLaunchSender(const std::string & command){
+
+            pm.Logger().debug("[CORE] GstParseLaunch : {}", command);
+
             pipeline = gst_parse_launch(command.c_str(), NULL);
             g_assert(pipeline);
 
@@ -29,29 +32,58 @@ namespace MediaServer
                 gst_bus_add_watch (bus, GstreamerCore::bus_callback, this);
                 gst_object_unref (bus);
             }
-
         }
+        void
+        GstParseLaunchReceiver(GstreamerCore & sender_core, const std::string & command){
 
-        std::string
-        GetCommand(){
-            std::stringstream ss;
-            if(codec == "AMR_NB"){
-            ss 
-                << "rtpbin name=rtpbin "
-                << "audiotestsrc wave=0 ! "
-                << "audioconvert ! "
-                << "amrnbenc band-mode=7 ! "
-                << "rtpamrpay pt=" << payload << " ssrc=" << ssrc << " ! "
-                << "rtpbin.send_rtp_sink_0 rtpbin.send_rtp_src_0 ! "
-                << "udpsink host=" << remoteip << " port=" << port << " bind-port=" << bindport << " ";
-            }
+            pipeline = gst_parse_launch(command.c_str(), NULL);
+            g_assert(pipeline);
+
+            GstElement* udpsink = gst_bin_get_by_name(GST_BIN(sender_core.pipeline), "udpsink");
+            GSocket *udp_sink_socket;
+            g_object_get (udpsink, "used-socket", &udp_sink_socket, NULL);
             
-            return ss.str();
+
+            GstElement* udpsrc = gst_bin_get_by_name(GST_BIN(pipeline), "udpsrc");
+            g_object_set (udpsrc, "socket", udp_sink_socket, NULL);
+
+            GstElement* rtpptdemux = gst_bin_get_by_name(GST_BIN(pipeline), "rtpptdemux");
+            g_signal_connect (rtpptdemux, "request-pt-map", G_CALLBACK (request_pt_map), nullptr);
+            g_signal_connect (rtpptdemux, "new-payload-type", G_CALLBACK (new_payload_type), nullptr);
+
+
+
+            // GstBus * bus = gst_pipeline_get_bus (GST_PIPELINE (pipeline));
+            // if(bus != nullptr){
+            //     gst_bus_add_watch (bus, GstreamerCore::bus_callback, this);
+            //     gst_object_unref (bus);
+            // }
         }
+
 
         void
         GstPlay(){
            gst_element_set_state(pipeline, GST_STATE_PLAYING) ;
+        }
+        void
+        GstReady(){
+           gst_element_set_state(pipeline, GST_STATE_READY) ;
+        }
+        void
+        GstPaused(){
+           gst_element_set_state(pipeline, GST_STATE_PAUSED) ;
+        }
+        static
+        GstCaps * 
+        request_pt_map (GstElement* object, guint arg0, gpointer user_data){
+            std::cout << "request_pt_map arg0:" << arg0 << std::endl;
+            return NULL;
+        }
+        static
+        GstCaps * 
+        new_payload_type (GstElement* object, guint arg0, GstPad* pad, gpointer user_data){
+            std::cout << "new_payload_type arg0:" << arg0 << std::endl;
+            return NULL;
         }
 
         static
@@ -61,8 +93,8 @@ namespace MediaServer
             // Core * core = (Core *)data;
             // GstElement * pipeline = core->pipeline;
             auto bus_callback_id = std::this_thread::get_id();
-            std::cout << "]############# Got bust... " << bus_callback_id << std::endl;
-            g_print ("############# Got %s message.. src:%s\n", GST_MESSAGE_TYPE_NAME (message), gst_element_get_name (message->src));
+            // std::cout << "]############# Got bust... " << bus_callback_id << std::endl;
+            // g_print ("############# Got %s message.. src:%s\n", GST_MESSAGE_TYPE_NAME (message), gst_element_get_name (message->src));
 
             switch (GST_MESSAGE_TYPE (message)) {
 
@@ -111,6 +143,7 @@ namespace MediaServer
                 }
                 case GST_MESSAGE_ELEMENT: //gstdtmfdemay event..
                 {
+                    std::cout << "dtmf " << std::endl;
                     // const GstStructure * structure = gst_message_get_structure(message);
 
                     // auto cb = [](GQuark field, const GValue *value, gpointer user_data) -> gboolean {
