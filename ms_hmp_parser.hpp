@@ -129,9 +129,10 @@ namespace MediaServer
         GetCommandReceiver(GstreamerCore & core){
             std::stringstream ss;
             ss 
+                << "rtpbin name=rtpbin "
                 << "udpsrc name=udpsrc caps=application/x-rtp ! "
-                << "rtpptdemux name=rtpptdemux ! "
-                << " fakesink ";
+                << "rtpbin.recv_rtp_sink_0 rtpbin. ! rtpdtmfdepay";
+                // << " fakesink ";
             return ss.str();
         }
 

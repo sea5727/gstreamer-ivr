@@ -47,9 +47,13 @@ namespace MediaServer
             GstElement* udpsrc = gst_bin_get_by_name(GST_BIN(pipeline), "udpsrc");
             g_object_set (udpsrc, "socket", udp_sink_socket, NULL);
 
-            GstElement* rtpptdemux = gst_bin_get_by_name(GST_BIN(pipeline), "rtpptdemux");
-            g_signal_connect (rtpptdemux, "request-pt-map", G_CALLBACK (request_pt_map), nullptr);
-            g_signal_connect (rtpptdemux, "new-payload-type", G_CALLBACK (new_payload_type), nullptr);
+            GstElement* rtpbin = gst_bin_get_by_name(GST_BIN(pipeline), "rtpbin");
+            g_signal_connect (rtpbin, "pad-added", G_CALLBACK (pad_added), NULL);
+
+
+            // GstElement* rtpptdemux = gst_bin_get_by_name(GST_BIN(pipeline), "rtpptdemux");
+            g_signal_connect (rtpbin, "request-pt-map", G_CALLBACK (request_pt_map), NULL);
+            // g_signal_connect (rtpptdemux, "new-payload-type", G_CALLBACK (new_payload_type), nullptr);
 
 
 
@@ -74,9 +78,20 @@ namespace MediaServer
            gst_element_set_state(pipeline, GST_STATE_PAUSED) ;
         }
         static
+        void
+        pad_added (GstElement* object, GstPad* arg0, gpointer user_data){
+            std::cout << "pad_added" << std::endl;
+        }
+
+        static
         GstCaps * 
-        request_pt_map (GstElement* object, guint arg0, gpointer user_data){
-            std::cout << "request_pt_map arg0:" << arg0 << std::endl;
+        request_pt_map (GstElement* object, guint payload, gpointer user_data){
+            std::cout << "request_pt_map arg0:" << payload << std::endl;
+            if(payload == 101){
+                GstCaps * caps = gst_caps_from_string("encoding-name=TELEPHONE-EVENT,payload=101,media=(string)audio, clock-rate=(int)0");
+                return caps;
+            }
+            
             return NULL;
         }
         static
