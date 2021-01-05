@@ -23,20 +23,20 @@ if(PKG_CONFIG_FOUND)
     pkg_check_modules (GST gstreamer-1.0)
     pkg_check_modules (GLIB glib-2.0)
     pkg_check_modules (GSTAUDIO gstreamer-audio-1.0)
+    pkg_check_modules (GSTRTP gstreamer-rtp-1.0)
     
     message(GST_INCLUDE_DIRS: ${GST_INCLUDE_DIRS} )
     message(GST_LIBRARY_DIRS: ${GST_LIBRARY_DIRS} )
     message(GST_LIBRARIES: ${GST_LIBRARIES} )   
-    INCLUDE_DIRECTORIES(${GST_INCLUDE_DIRS} ${GLIB_INCLUDE_DIRS} ${GSTAUDIO_INCLUDE_DIRS})
-    LINK_LIBRARIES(${GST_LIBRARIES} ${GLIB_LIBRARIES} ${GSTAUDIO_LIBRARIES})
+    INCLUDE_DIRECTORIES(${GST_INCLUDE_DIRS} ${GLIB_INCLUDE_DIRS} ${GSTAUDIO_INCLUDE_DIRS} ${GSTRTP_INCLUDE_DIRS})
+    LINK_LIBRARIES(${GST_LIBRARIES} ${GLIB_LIBRARIES} ${GSTAUDIO_LIBRARIES} ${GSTRTP_LIBRARIES} )
 endif()
 
 find_package(cpprestsdk REQUIRED)
 
 include_directories( /usr/local/boost/include/ /usr/include/gstreamer-1.0 )
-link_directories( /usr/local/lib64 /usr/local/gcc/lib64 /usr/local/boost/lib/)
-link_libraries(pthread boost_thread spdlog)
-
+link_directories( /usr/local/lib64 /usr/local/gcc/lib64 /usr/local/boost/lib/ )
+link_libraries(pthread boost_thread spdlog )
 
 # add_executable(gstreamer-media-server 
 #                 ms_main.cpp

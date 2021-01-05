@@ -164,12 +164,11 @@ namespace MediaServer
                         if(dst_tool_ids.is_null()){ // first
                             auto dst_tool_id = data["backend_tool_id"].as_integer();
                             pm.Logger().debug("[TOOLID] {} first start" , n_tool_id);
-                            MediaServer::HmpParser::ParseForSender(surfapi);
+                            MediaServer::HmpParser::ParseForSender(surfapi, sock);
                             MediaServer::HmpParser::MakeRtpSender(surfapi);
                             MediaServer::HmpParser::SetStatePaused(n_tool_id);
                             
-
-                            MediaServer::HmpParser::ParseForReceiver(surfapi);
+                            MediaServer::HmpParser::ParseForReceiver(surfapi, sock);
                             MediaServer::HmpParser::MakeRtpReceiver(surfapi);
 
                             MediaServer::HmpParser::SetStatePlay(n_tool_id);
@@ -182,31 +181,15 @@ namespace MediaServer
                             pm.Logger().debug("[TOOLID] {} second start" , n_tool_id);
                             std::cout << data["dst_tool_ids"][0] << std::endl;
                             auto dst_tool_ids = data["dst_tool_ids"][0].as_integer() ;
-                            tool_req_list[n_tool_id] = surfapi;
+                            tool_req_list[n_tool_id] = tool_req_list[dst_tool_ids];
                             response["tool_ans"]["data"]["error_code"] = web::json::value::number(0);
                             response["tool_ans"]["data"]["description"] = web::json::value::string("OK");
                         }
                     }
                    else if(tool_type == web::json::value("file_reader")){ // third
-                        
-                        data["events"][0]["type"];
-                        data["events"][0]["enabled"];
-                        data["audio_enabled"];
+                        pm.Logger().debug("[TOOLID] {} third start" , n_tool_id);
                         auto audio_dst_tool_ids = data["audio_dst_tool_ids"][0].as_integer();
-                        data["video_enabled"];
-                        data["video_dst_tool_ids"][0];
-                        auto dst_set_config = tool_req_list[audio_dst_tool_ids];
-                        auto dst_tool_ids = dst_set_config["tool_req"]["data"]["dst_tool_ids"][0].as_integer();
-
-
-            //             // MediaProcess::Commander::create_core(n_tool_id);
-            //             // MediaProcess::Commander::set_hmp_file_source(n_tool_id, data);
-            //             // MediaProcess::Commander::make_hmp_file_source(n_tool_id);
-            //             // MediaProcess::Commander::link_hmp_sink_to_source(n_tool_id, dst_tool_ids);
-
-            //             // std::cout << "tool_req_list: " << tool_req_list[n_tool_id].is_null() << std::endl;
-            //             // tool_req_list[n_tool_id] = body;
-            //             // std::cout << "tool_req_list: " << tool_req_list[n_tool_id].is_null() << std::endl;
+                        tool_req_list[n_tool_id] = tool_req_list[audio_dst_tool_ids];
                         response["tool_ans"]["data"]["error_code"] = web::json::value::number(0);
                         response["tool_ans"]["data"]["description"] = web::json::value::string("OK");
                     }
@@ -214,21 +197,24 @@ namespace MediaServer
                 else if(req_type == web::json::value("command")){
                     auto data = surfapi["tool_req"]["data"];
                     if(data["cmd_type"] == web::json::value("play_list_clear")){
-            //             // MediaProcess::Commander::clear_file_list(n_tool_id);
-            //             // // MsCommander::clear_filesrc_pipeline(n_tool_id);
+                        auto sender_tool_id = tool_req_list[n_tool_id]["tool_req"]["tool_id"].as_integer();
+                        std::cout << "send_tool_id : "<< sender_tool_id << std::endl;
+                        MediaServer::HmpParser::ClearPlayList(sender_tool_id);
+        
                     }
                     if(data["cmd_type"] == web::json::value("play_list_append")){
+                        auto sender_tool_id = tool_req_list[n_tool_id]["tool_req"]["tool_id"].as_integer();
                         std::vector<std::string> filelist;
                         auto files = data["files"].as_array();
                         for(auto & file : files){
                             auto name = file["name"].as_string();
                             filelist.push_back(name);
                         }
-                        // MediaProcess::Commander::append_file_list(n_tool_id, filelist);
-                        // // MsCommander::append_filesrc_pipeline(n_tool_id, filelist);
-
+                        MediaServer::HmpParser::AppandPlayList(sender_tool_id, filelist);
                     }
                     if(data["cmd_type"] == web::json::value("play")){
+                        auto sender_tool_id = tool_req_list[n_tool_id]["tool_req"]["tool_id"].as_integer();
+                        MediaServer::HmpParser::PlayFile(sender_tool_id);
                         // auto set_config = tool_req_list[n_tool_id];
                         // auto audio_dst_tool_ids = set_config["tool_req"]["data"]["audio_dst_tool_ids"][0].as_integer();
 

@@ -16,8 +16,18 @@ namespace MediaServer
         std::string codec;
         GstElement * pipeline;
 
+        int tool_id;
+        boost::asio::ip::tcp::socket & sock;
+        std::vector<std::string> filelist;
+        int current_file_index;
+
     public:
-        GstreamerCore() = default;
+        GstreamerCore(int tool_id, boost::asio::ip::tcp::socket & sock)
+            : tool_id{tool_id}
+            , sock{sock}
+            , filelist{}
+            , current_file_index{-1}
+            { }
 
         void
         GstParseLaunchSender(const std::string & command){
@@ -48,23 +58,108 @@ namespace MediaServer
             g_object_set (udpsrc, "socket", udp_sink_socket, NULL);
 
             GstElement* rtpbin = gst_bin_get_by_name(GST_BIN(pipeline), "rtpbin");
-            g_signal_connect (rtpbin, "pad-added", G_CALLBACK (pad_added), NULL);
+            
 
 
             // GstElement* rtpptdemux = gst_bin_get_by_name(GST_BIN(pipeline), "rtpptdemux");
+            g_signal_connect (rtpbin, "pad-added", G_CALLBACK (pad_added), this);
             g_signal_connect (rtpbin, "request-pt-map", G_CALLBACK (request_pt_map), NULL);
+            g_signal_connect (rtpbin, "on-new-ssrc", G_CALLBACK (on_new_ssrc), NULL);
             // g_signal_connect (rtpptdemux, "new-payload-type", G_CALLBACK (new_payload_type), nullptr);
 
-
-
-            // GstBus * bus = gst_pipeline_get_bus (GST_PIPELINE (pipeline));
-            // if(bus != nullptr){
-            //     gst_bus_add_watch (bus, GstreamerCore::bus_callback, this);
-            //     gst_object_unref (bus);
-            // }
+            GstBus * bus = gst_pipeline_get_bus (GST_PIPELINE (pipeline));
+            if(bus != nullptr){
+                gst_bus_add_watch (bus, GstreamerCore::bus_callback, this);
+                gst_object_unref (bus);
+            }
         }
 
+        void
+        ClearPlayList(){
+            filelist.clear();
 
+            GstElement * audiotestsrc = nullptr;
+            audiotestsrc = gst_bin_get_by_name(GST_BIN(pipeline), "audiotestsrc");
+            std::cout << "audiotestsrc : " << (void *)audiotestsrc << std::endl;
+            if(audiotestsrc == nullptr){
+                gst_element_set_state (pipeline, GST_STATE_READY);
+                GstElement * filesrc = gst_bin_get_by_name(GST_BIN(pipeline), "filesrc");
+                GstElement * wavparse = gst_bin_get_by_name(GST_BIN(pipeline), "wavparse");
+                GstElement * alawdec = gst_bin_get_by_name(GST_BIN(pipeline), "alawdec");
+                GstElement * audioconvert = gst_bin_get_by_name(GST_BIN(pipeline), "audioconvert");
+
+                gst_bin_remove_many(GST_BIN(pipeline), filesrc, wavparse, alawdec, NULL);
+
+                audiotestsrc = gst_element_factory_make("audiotestsrc", "audiotestsrc");
+                g_object_set (audiotestsrc, "wav", 0, NULL);//4
+
+                gst_bin_add(GST_BIN (pipeline), audiotestsrc);
+                if (!gst_element_link(audiotestsrc, audioconvert)){
+                    g_error("fail link audiotestsrc audioconvert\n");
+                }
+
+                GstElement * rtpamrpay = gst_bin_get_by_name(GST_BIN(pipeline), "rtppay");
+
+                GstRTPBasePayload *rtpbasepayload = GST_RTP_BASE_PAYLOAD (rtpamrpay);
+                guint32 new_timestamp = rtpbasepayload->timestamp;
+                guint16 new_seq = rtpbasepayload->seqnum;
+                g_object_set(rtpamrpay, "timestamp-offset", new_timestamp, "seqnum-offset", new_seq, NULL);
+
+                gst_element_set_state(pipeline, GST_STATE_PLAYING);
+
+            }
+        }
+        void
+        AppandPlayList(std::vector<std::string> & list){
+            for(std::string & file : list){
+                
+                auto old = std::string{"/home/sta/"};
+                auto old_pos = file.find(old);
+                file.replace(old_pos, old.length(), "/home/jdin/");
+
+                filelist.push_back(file);
+                g_print("push_back:%s\n", file.c_str());
+            }   
+        }
+        void
+        PlayFile(){
+            std::cout << "PlayFile start.. current_file_index : " << current_file_index << ", filelist.size():" << filelist.size() << std::endl;
+            if(current_file_index < 0 && filelist.size() > 0){
+                current_file_index = 0;
+
+                gst_element_set_state(pipeline, GST_STATE_READY);
+
+                GstElement * audiotestsrc = nullptr;
+                GstElement * filesrc = nullptr;
+                GstElement * wavparse = nullptr;
+                GstElement * alawdec = nullptr;
+
+                audiotestsrc = gst_bin_get_by_name(GST_BIN(pipeline), "audiotestsrc");
+                if(audiotestsrc != nullptr){
+                    gst_bin_remove(GST_BIN(pipeline), audiotestsrc);
+
+                    filesrc = gst_element_factory_make("filesrc", "filesrc");
+                    g_object_set (filesrc, "location", filelist[current_file_index].c_str(), NULL);
+                    wavparse = gst_element_factory_make("wavparse", "wavparse");
+                    alawdec = gst_element_factory_make("alawdec", "alawdec");
+
+                    GstElement * audioconvert = gst_bin_get_by_name(GST_BIN(pipeline), "audioconvert");
+
+                    gst_bin_add_many(GST_BIN (pipeline), filesrc, wavparse, alawdec, NULL);
+                    if (!gst_element_link_many (filesrc, wavparse, alawdec, audioconvert, NULL)) {
+                        g_error ("Failed to link audiosrc, audioconv, audioresample, "
+                            "audio encoder and audio payloader");
+                    }
+
+                    g_print("file:%s\n", filelist[current_file_index].c_str());
+
+                    gst_element_set_state(pipeline, GST_STATE_PLAYING);
+
+                }
+                else{
+                }
+            }
+        }
         void
         GstPlay(){
            gst_element_set_state(pipeline, GST_STATE_PLAYING) ;
@@ -77,22 +172,105 @@ namespace MediaServer
         GstPaused(){
            gst_element_set_state(pipeline, GST_STATE_PAUSED) ;
         }
-        static
+
         void
-        pad_added (GstElement* object, GstPad* arg0, gpointer user_data){
-            std::cout << "pad_added" << std::endl;
+        GstClear()
+        {
+            gst_element_set_state (pipeline, GST_STATE_READY);
+
+            GstElement * audiotestsrc = nullptr;
+            audiotestsrc = gst_bin_get_by_name(GST_BIN(pipeline), "audiotestsrc");
+            if(audiotestsrc == nullptr){
+                GstElement * filesrc = gst_bin_get_by_name(GST_BIN(pipeline), "filesrc");
+                GstElement * wavparse = gst_bin_get_by_name(GST_BIN(pipeline), "wavparse");
+                GstElement * alawdec = gst_bin_get_by_name(GST_BIN(pipeline), "alawdec");
+                GstElement * audioconvert = gst_bin_get_by_name(GST_BIN(pipeline), "audioconvert");
+
+                gst_bin_remove_many(GST_BIN(pipeline), filesrc, wavparse, alawdec, NULL);
+
+                audiotestsrc = gst_element_factory_make("audiotestsrc", "audiotestsrc");
+                g_object_set (audiotestsrc, "wave", 0, NULL);//4
+
+                gst_bin_add(GST_BIN (pipeline), audiotestsrc);
+                if (!gst_element_link(audiotestsrc, audioconvert)){
+                    g_error("fail link audiotestsrc audioconvert\n");
+                }
+
+                GstElement * rtpamrpay = gst_bin_get_by_name(GST_BIN(pipeline), "rtppay");
+
+                GstRTPBasePayload *rtpbasepayload = GST_RTP_BASE_PAYLOAD (rtpamrpay);
+                guint32 new_timestamp = rtpbasepayload->timestamp;
+                guint16 new_seq = rtpbasepayload->seqnum;
+                g_object_set(rtpamrpay, "timestamp-offset", new_timestamp, "seqnum-offset", new_seq, NULL);
+
+                gst_element_set_state(pipeline, GST_STATE_PLAYING);
+
+            }
+        }
+        static
+        void 
+        on_new_ssrc (GstElement* object, guint arg0, guint arg1, gpointer user_data){
+            std::cout << "on_new_ssrc arg0:" << arg0 << ", arg1:" << arg1 << std::endl;
+            
         }
 
         static
+        void
+        pad_added (GstElement* object, GstPad* new_pad, gpointer user_data){
+            GstreamerCore * core = (GstreamerCore *)user_data;
+            std::cout << "pad_added arg0 : "  << new_pad << std::endl;
+
+            GstPad *sinkpad;
+            GstPadLinkReturn lres;
+
+            g_print ("new payload on pad: %s\n", GST_PAD_NAME (new_pad));
+            GstCaps* caps = gst_pad_get_current_caps(new_pad);
+            gchar* caps_str = gst_caps_to_string(caps);
+            g_print("caps: %s\n", caps_str);
+            GstStructure* stru = gst_caps_get_structure(caps, 0);
+            gint payload = 0;
+            gst_structure_get_int(stru, "payload", &payload);
+
+            std::cout << "payload : " << payload << std::endl;
+
+            if (payload == 8 /* PCMA */)  {
+                // sinkpad = gst_element_get_static_pad(depay, "sink");
+                // g_assert(sinkpad);
+            } else if (payload == 101 /* TELEPHONE-EVENT */)  {
+                GError *err = 0;
+
+                GstElement* rtpdtmfdepay = gst_bin_get_by_name(GST_BIN(core->pipeline), "rtpdtmfdepay");
+                GstPad* sinkpad = gst_element_get_static_pad (rtpdtmfdepay, "sink");
+
+                lres = gst_pad_link(new_pad, sinkpad);
+                g_assert(lres == GST_PAD_LINK_OK); // Crashed when payload == TELEPHONE-EVENT
+                gst_object_unref(sinkpad);
+
+
+
+                // /* I try to use rtpdtmfdepay:  */
+                // GstElement* dtmf_sink = gst_parse_bin_from_description(
+                //             "rtpdtmfdepay !  fakesink", 1, &err);
+                // g_assert(sinkpad);
+                // gst_bin_add(GST_BIN(core->pipeline), dtmf_sink);
+                // sinkpad = gst_element_get_static_pad(dtmf_sink, "sink");
+            }
+
+
+        }
+        static
         GstCaps * 
-        request_pt_map (GstElement* object, guint payload, gpointer user_data){
-            std::cout << "request_pt_map arg0:" << payload << std::endl;
-            if(payload == 101){
-                GstCaps * caps = gst_caps_from_string("encoding-name=TELEPHONE-EVENT,payload=101,media=(string)audio, clock-rate=(int)0");
+        request_pt_map (GstElement* object, guint arg0, guint payload, gpointer user_data){
+            if(payload == 104){
+                GstCaps * caps = gst_caps_from_string("application/x-rtp, media=(string)AMR, encoding-params=(string)1, octet-align=(string)1, payload=(int)104");
                 return caps;
             }
-            
+            else if(payload == 101){
+                GstCaps * caps = gst_caps_from_string("application/x-rtp,media=(string)audio,clock-rate=(int)8000,encoding-name=TELEPHONE-EVENT,payload=(int)101");
+                return caps;
+            }
             return NULL;
+            
         }
         static
         GstCaps * 
@@ -105,8 +283,8 @@ namespace MediaServer
         gboolean
         bus_callback (GstBus * bus, GstMessage * message, gpointer data)
         {
-            // Core * core = (Core *)data;
-            // GstElement * pipeline = core->pipeline;
+            GstreamerCore * core = (GstreamerCore *)data;
+            GstElement * pipeline = core->pipeline;
             auto bus_callback_id = std::this_thread::get_id();
             // std::cout << "]############# Got bust... " << bus_callback_id << std::endl;
             // g_print ("############# Got %s message.. src:%s\n", GST_MESSAGE_TYPE_NAME (message), gst_element_get_name (message->src));
@@ -136,60 +314,64 @@ namespace MediaServer
                 case GST_MESSAGE_EOS:
                 {
                     g_print("#### Got GST_MESSAGE_EOS Event.. ####\n");
-                    // if(core->current_file_index + 1 == core->filesrc_locations.size()){
-                    //     (*core).GstClear();
-                    // }
-                    // else {
-                    //     gst_element_set_state(pipeline, GST_STATE_READY);
-                    //     (*core).current_file_index += 1;
-                    //     GstElement * filesrc = gst_bin_get_by_name(GST_BIN(pipeline), "filesrc");
-                    //     g_object_set (filesrc, "location", core->filesrc_locations[core->current_file_index].c_str(), NULL);
+                    if(core->current_file_index + 1 == core->filelist.size()){
+                        core->GstClear();
+                    }
+                    else {
+                        gst_element_set_state(pipeline, GST_STATE_READY);
+                        (*core).current_file_index += 1;
+                        GstElement * filesrc = gst_bin_get_by_name(GST_BIN(pipeline), "filesrc");
+                        g_object_set (filesrc, "location", core->filelist[core->current_file_index].c_str(), NULL);
 
-                    //     GstElement * rtpamrpay = gst_bin_get_by_name(GST_BIN(pipeline), "rtppay");
+                        GstElement * rtpamrpay = gst_bin_get_by_name(GST_BIN(pipeline), "rtppay");
 
-                    //     GstRTPBasePayload *rtpbasepayload = GST_RTP_BASE_PAYLOAD (rtpamrpay);
-                    //     guint32 new_timestamp = rtpbasepayload->timestamp;
-                    //     guint16 new_seq = rtpbasepayload->seqnum;
-                    //     g_object_set(rtpamrpay, "timestamp-offset", new_timestamp, "seqnum-offset", new_seq, NULL);
+                        GstRTPBasePayload *rtpbasepayload = GST_RTP_BASE_PAYLOAD (rtpamrpay);
+                        guint32 new_timestamp = rtpbasepayload->timestamp;
+                        guint16 new_seq = rtpbasepayload->seqnum;
+                        g_object_set(rtpamrpay, "timestamp-offset", new_timestamp, "seqnum-offset", new_seq, NULL);
 
-                    //     gst_element_set_state(pipeline, GST_STATE_PLAYING);
-                    // }
+                        gst_element_set_state(pipeline, GST_STATE_PLAYING);
+                    }
                     break;
                 }
                 case GST_MESSAGE_ELEMENT: //gstdtmfdemay event..
                 {
                     std::cout << "dtmf " << std::endl;
-                    // const GstStructure * structure = gst_message_get_structure(message);
+                    const GstStructure * structure = gst_message_get_structure(message);
 
-                    // auto cb = [](GQuark field, const GValue *value, gpointer user_data) -> gboolean {
-                    //     MsCore * core = (MsCore *)user_data;
-                    //     GstElement * pipeline = core->pipeline;
+                    auto cb = [](GQuark field, const GValue *value, gpointer user_data) -> gboolean {
+                        GstreamerCore * core = (GstreamerCore *)user_data;
+                        GstElement * pipeline = core->pipeline;
 
 
-                    //     gchar *str = gst_value_serialize (value);
-                    //     const char* fieldname = g_quark_to_string (field);
-                    //     if(strcmp(fieldname, "number") == 0){
-                    //         // int number = atoi(str);
-                    //         // g_print("number:%d\n", number);
-                    //         // HmpTcpParser parser;
-                    //         // parser.tool_id = (*core).tool_id;
-                    //         // std::stringstream ss;
-                    //         // ss << "DTMF" << str;
-                    //         // for(auto &event : (*core).event_list){
-                    //         //     auto response1 = parser.MakeRtpEventDetected(ss.str());
-                    //         //     g_print("response1:%s\n", response1.c_str());
-                    //         //     event(response1);
-                    //         //     auto response2 = parser.MakeRtpEventEnded();
-                    //         //     g_print("response2:%s\n", response2.c_str());
-                    //         //     event(response2);
+                        gchar *str = (char *)gst_value_serialize (value);
+                        const char* fieldname = g_quark_to_string (field);
+                        if(strcmp(fieldname, "number") == 0){
+                            auto response = web::json::value::object();
+                            response["tool_inf"]["inf_type"] = web::json::value::string("event");
+                            response["tool_inf"]["tool_id"] = web::json::value::number(core->tool_id);
+                            response["tool_inf"]["data"]["type"] = web::json::value::string("RTP_event_detected");
+                            response["tool_inf"]["data"]["event"] = web::json::value::string(std::string{"DTMF"} + std::string{str});
 
-                    //         // }
-                    //     }
-                    //     g_print ("%15s: %s\n", fieldname, str);
-                    //     g_free (str);
-                    //     return (gboolean)TRUE;
-                    // };
-                    // gst_structure_foreach(structure, cb, core);
+                            auto rsp = response.serialize();
+                            uint32_t rsp_len = rsp.length();
+                            std::vector<boost::asio::const_buffer> buffers;
+                            buffers.push_back(boost::asio::buffer(&rsp_len, sizeof(rsp_len)));
+                            buffers.push_back(boost::asio::buffer(rsp, rsp_len));
+
+                            boost::asio::async_write(core->sock, buffers, 
+                                [](const boost::system::error_code & error, size_t len){
+                                    if(error){
+                                        return;
+                                    }
+                                });
+                            
+                        }
+                        g_print ("%15s: %s\n", fieldname, str);
+                        g_free (str);
+                        return (gboolean)TRUE;
+                    };
+                    gst_structure_foreach(structure, cb, core);
 
                     break;
                 }

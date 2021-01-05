@@ -6,6 +6,7 @@
 #include <thread>
 
 #include <gst/gst.h>
+#include <gst/rtp/gstrtpbasepayload.h>
 #include <gio/gio.h>
 #include <boost/bind/bind.hpp>
 #include <boost/asio.hpp>
