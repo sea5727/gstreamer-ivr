@@ -12,8 +12,9 @@ namespace MediaServer
         const std::string HANDSHAKE;
         const size_t LEN_HANDSHAKE;
         Manager & pm;
+        HmpManager & hmp_pm;
 
-        std::array<web::json::value, 10000> tool_req_list;
+        std::array<web::json::value, 10000> & tool_req_list;
         
     public:
         HmpServer(boost::asio::io_service & io_service)
@@ -22,6 +23,8 @@ namespace MediaServer
             , HANDSHAKE{"surfapi"}
             , LEN_HANDSHAKE{HANDSHAKE.length()}
             , pm{Manager::getInstance()}
+            , hmp_pm{HmpManager::getInstance()}
+            , tool_req_list{hmp_pm.tool_req_list}
             {}
 
         void
@@ -120,10 +123,13 @@ namespace MediaServer
         }
         void
         proc(char * buffer, size_t len){
+            auto bufferlen = strlen(buffer);
+            if(bufferlen < len)
+                len = bufferlen;
 
             pm.Logger().debug("[Recv] data{} : {}", len, buffer);
 
-            auto request = std::string{buffer};
+            auto request = std::string{buffer, len};
 
             auto surfapi = web::json::value::parse(request);
             pm.Logger().debug("[Recv] parse success");
@@ -215,24 +221,13 @@ namespace MediaServer
                     if(data["cmd_type"] == web::json::value("play")){
                         auto sender_tool_id = tool_req_list[n_tool_id]["tool_req"]["tool_id"].as_integer();
                         MediaServer::HmpParser::PlayFile(sender_tool_id);
-                        // auto set_config = tool_req_list[n_tool_id];
-                        // auto audio_dst_tool_ids = set_config["tool_req"]["data"]["audio_dst_tool_ids"][0].as_integer();
-
-                        // MediaProcess::Commander::ready(audio_dst_tool_ids);
-                        // MediaProcess::Commander::play_file_list(n_tool_id);
-                        // // MsCommander::ready_media_core(audio_dst_tool_ids);
-                        // // MsCommander::play_filesrc_pipeline(n_tool_id);
                     }
 
                 }
 
                 else if(req_type == web::json::value("remove")){
-                    std::cout << "this is remove!! core_index:" << n_tool_id << "\n";
-                    // MediaProcess::Commander::remove(n_tool_id);
-                    std::cout << "remove end...\n";
-                    // std::cout << "tool_req_list: " << tool_req_list[n_tool_id].is_null() << std::endl;
-                    // tool_req_list[n_tool_id] = web::json::value::null();
-                    // std::cout << "tool_req_list: " << tool_req_list[n_tool_id].is_null() << std::endl;
+                    MediaServer::HmpParser::PlayRemove(n_tool_id);
+                    tool_req_list[n_tool_id] = web::json::value::null();
                 }
             }
             SendResponse:

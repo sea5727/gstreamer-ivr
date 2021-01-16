@@ -133,6 +133,18 @@ namespace MediaServer
             core->PlayFile();
         }
 
+        static
+        void
+        PlayRemove(int index){
+            auto & core = GstreamerCore::CoreList.at(index);
+            if(!core){
+                return;
+            }
+            core->Remove();
+        }
+
+
+
 
         static
         std::string
@@ -143,7 +155,7 @@ namespace MediaServer
                 << "rtpbin name=rtpbin "
                 << "audiotestsrc name=audiotestsrc wave=0 ! "
                 << "audioconvert name=audioconvert ! "
-                << "amrnbenc name=amrnbenc band-mode=7 ! "
+                << "amrnbenc name=amrnbenc band-mode=6 ! "
                 << "rtpamrpay name=rtppay pt=" << core.payload << " ssrc=" << core.ssrc << " ! "
                 << "rtpbin.send_rtp_sink_0 rtpbin.send_rtp_src_0 ! "
                 << "udpsink name=udpsink host=" << core.remoteip << " port=" << core.port << " bind-port=" << core.bindport << " ";

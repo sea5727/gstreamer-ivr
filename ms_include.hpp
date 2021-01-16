@@ -19,6 +19,7 @@
 #include <spdlog/sinks/stdout_color_sinks.h>
 
 #include "ms_manager.hpp"
+#include "ms_hmp_manager.hpp"
 #include "ms_gstreamer_core.hpp"
 #include "ms_hmp_parser.hpp"
 

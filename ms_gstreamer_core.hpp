@@ -77,12 +77,13 @@ namespace MediaServer
         void
         ClearPlayList(){
             filelist.clear();
+            current_file_index = -1;
 
-            GstElement * audiotestsrc = nullptr;
-            audiotestsrc = gst_bin_get_by_name(GST_BIN(pipeline), "audiotestsrc");
-            std::cout << "audiotestsrc : " << (void *)audiotestsrc << std::endl;
-            if(audiotestsrc == nullptr){
+            GstElement * audiotestsrc = gst_bin_get_by_name(GST_BIN(pipeline), "audiotestsrc");
+            pm.Logger().info("ClearPlayList.. audiotestsrc : {}", (void *)audiotestsrc);
+            if(audiotestsrc == nullptr){ // filesrc should be cleared 
                 gst_element_set_state (pipeline, GST_STATE_READY);
+
                 GstElement * filesrc = gst_bin_get_by_name(GST_BIN(pipeline), "filesrc");
                 GstElement * wavparse = gst_bin_get_by_name(GST_BIN(pipeline), "wavparse");
                 GstElement * alawdec = gst_bin_get_by_name(GST_BIN(pipeline), "alawdec");
@@ -90,8 +91,17 @@ namespace MediaServer
 
                 gst_bin_remove_many(GST_BIN(pipeline), filesrc, wavparse, alawdec, NULL);
 
+                gst_element_set_state(filesrc, GST_STATE_NULL);
+                gst_element_set_state(wavparse, GST_STATE_NULL);
+                gst_element_set_state(alawdec, GST_STATE_NULL);
+                
+                gst_object_unref(filesrc);
+                gst_object_unref(wavparse);
+                gst_object_unref(alawdec);
+
                 audiotestsrc = gst_element_factory_make("audiotestsrc", "audiotestsrc");
-                g_object_set (audiotestsrc, "wav", 0, NULL);//4
+                g_object_set (audiotestsrc, "wave", 4, NULL);//4
+
 
                 gst_bin_add(GST_BIN (pipeline), audiotestsrc);
                 if (!gst_element_link(audiotestsrc, audioconvert)){
@@ -118,7 +128,6 @@ namespace MediaServer
                 file.replace(old_pos, old.length(), "/home/jdin/");
 
                 filelist.push_back(file);
-                g_print("push_back:%s\n", file.c_str());
             }   
         }
         void
@@ -138,6 +147,10 @@ namespace MediaServer
                 if(audiotestsrc != nullptr){
                     gst_bin_remove(GST_BIN(pipeline), audiotestsrc);
 
+                    gst_element_set_state(audiotestsrc, GST_STATE_NULL);
+
+                    gst_object_unref(audiotestsrc);
+
                     filesrc = gst_element_factory_make("filesrc", "filesrc");
                     g_object_set (filesrc, "location", filelist[current_file_index].c_str(), NULL);
                     wavparse = gst_element_factory_make("wavparse", "wavparse");
@@ -153,12 +166,24 @@ namespace MediaServer
 
                     g_print("file:%s\n", filelist[current_file_index].c_str());
 
+                    GstElement * rtpamrpay = gst_bin_get_by_name(GST_BIN(pipeline), "rtppay");
+
+                    GstRTPBasePayload *rtpbasepayload = GST_RTP_BASE_PAYLOAD (rtpamrpay);
+                    guint32 new_timestamp = rtpbasepayload->timestamp;
+                    guint16 new_seq = rtpbasepayload->seqnum;
+                    g_object_set(rtpamrpay, "timestamp-offset", new_timestamp, "seqnum-offset", new_seq, NULL);
+
                     gst_element_set_state(pipeline, GST_STATE_PLAYING);
 
                 }
                 else{
                 }
             }
+        }
+        void
+        Remove(){
+            gst_element_set_state (pipeline, GST_STATE_NULL);
+            gst_object_unref (pipeline);
         }
         void
         GstPlay(){
@@ -178,8 +203,8 @@ namespace MediaServer
         {
             gst_element_set_state (pipeline, GST_STATE_READY);
 
-            GstElement * audiotestsrc = nullptr;
-            audiotestsrc = gst_bin_get_by_name(GST_BIN(pipeline), "audiotestsrc");
+            GstElement * audiotestsrc = gst_bin_get_by_name(GST_BIN(pipeline), "audiotestsrc");
+            pm.Logger().info("GstClear.. audiotestsrc : {}", (void *)audiotestsrc);
             if(audiotestsrc == nullptr){
                 GstElement * filesrc = gst_bin_get_by_name(GST_BIN(pipeline), "filesrc");
                 GstElement * wavparse = gst_bin_get_by_name(GST_BIN(pipeline), "wavparse");
@@ -188,8 +213,16 @@ namespace MediaServer
 
                 gst_bin_remove_many(GST_BIN(pipeline), filesrc, wavparse, alawdec, NULL);
 
+                gst_element_set_state(filesrc, GST_STATE_NULL);
+                gst_element_set_state(wavparse, GST_STATE_NULL);
+                gst_element_set_state(alawdec, GST_STATE_NULL);
+
+                gst_object_unref(filesrc);
+                gst_object_unref(wavparse);
+                gst_object_unref(alawdec);
+
                 audiotestsrc = gst_element_factory_make("audiotestsrc", "audiotestsrc");
-                g_object_set (audiotestsrc, "wave", 0, NULL);//4
+                g_object_set (audiotestsrc, "wave", 4, NULL);//4
 
                 gst_bin_add(GST_BIN (pipeline), audiotestsrc);
                 if (!gst_element_link(audiotestsrc, audioconvert)){
@@ -328,7 +361,9 @@ namespace MediaServer
                         GstRTPBasePayload *rtpbasepayload = GST_RTP_BASE_PAYLOAD (rtpamrpay);
                         guint32 new_timestamp = rtpbasepayload->timestamp;
                         guint16 new_seq = rtpbasepayload->seqnum;
-                        g_object_set(rtpamrpay, "timestamp-offset", new_timestamp, "seqnum-offset", new_seq, NULL);
+                        // TODO AMR은 160으로 gstreamer에 하드코딩 되어있음.  https://github.com/GStreamer/gst-plugins-good/blob/master/gst/rtp/gstrtpamrpay.c, line:348
+                        // TODO 각 코덱 별로 값을 찾아 정의해줘야 할듯..
+                        g_object_set(rtpamrpay, "timestamp-offset", new_timestamp + 160, "seqnum-offset", new_seq + 1, NULL);
 
                         gst_element_set_state(pipeline, GST_STATE_PLAYING);
                     }

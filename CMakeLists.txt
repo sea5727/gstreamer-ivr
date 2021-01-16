@@ -43,6 +43,7 @@ link_libraries(pthread boost_thread spdlog )
 #                 ms_hmp_server.cpp
 #                 ms_core_gst.cpp
 #                 ms_core_gst_builder.cpp)
+add_executable(test1 test1.cpp)
 add_executable(gstreamer-media-server ms_main.cpp)
 # add_dependencies(gstreamer-media-server oops)
 target_link_libraries(gstreamer-media-server cpprestsdk::cpprest ssl crypto)
