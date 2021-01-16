@@ -144,7 +144,16 @@ namespace MediaServer
         }
 
 
-
+// 가능 코덱
+// amrnb
+// amrwb
+// PCMU
+// PCMA
+// opus
+// flac
+// gsm
+// VP8
+// VP9
 
         static
         std::string
