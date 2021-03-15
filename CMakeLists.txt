@@ -11,9 +11,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED on)
 include(CTest)
 enable_testing()
 
-# add_subdirectory(liboops)
-
-
 include(FindPkgConfig)
 if(PKG_CONFIG_FOUND)
     message(PKG_CONFIG_FOUND: ${PKG_CONFIG_FOUND} )
@@ -38,15 +35,11 @@ include_directories( /usr/local/boost/include/ /usr/include/gstreamer-1.0 )
 link_directories( /usr/local/lib64 /usr/local/gcc/lib64 /usr/local/boost/lib/ )
 link_libraries(pthread boost_thread spdlog )
 
-# add_executable(gstreamer-media-server 
-#                 ms_main.cpp
-#                 ms_hmp_server.cpp
-#                 ms_core_gst.cpp
-#                 ms_core_gst_builder.cpp)
-add_executable(test1 test1.cpp)
-add_executable(gstreamer-media-server ms_main.cpp)
-# add_dependencies(gstreamer-media-server oops)
-target_link_libraries(gstreamer-media-server cpprestsdk::cpprest ssl crypto)
+
+add_executable(ivr.exe ms_main.cpp)
+target_link_libraries(ivr.exe cpprestsdk::cpprest ssl crypto)
+
+add_executable(demo.exe ms_demo.cpp)
 
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})

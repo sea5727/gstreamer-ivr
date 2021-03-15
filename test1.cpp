@@ -24,6 +24,7 @@ public:
 
     TestClass& operator=(const TestClass& other){
         this->name = other.name;
+        return *this;
     }
 };
 
