@@ -4,7 +4,7 @@ import gi
 gi.require_version('Gst', '1.0')
 from gi.repository import Gst, GLib, GObject, GstRtp
 
-# for audio sounds debug , should wave param of audiotestsrc is 0 ( beep sounds )
+# for debug of audio sound, should wave param of audiotestsrc is 0 ( beep sounds )
 PIPELINE_DESC = '''
 audiotestsrc name=audiotestsrc wave=0 ! audioconvert name=audioconvert ! audioresample ! alawenc ! rtppcmapay name=rtppay pt=96 ! udpsink host=192.168.0.4 port=3000
 '''
@@ -142,9 +142,6 @@ def trigger(*args):
         '/home/ysh8361/10.wav'
     ]
     ivr._play_file()
-
-    
-    
 
 
 if __name__ == '__main__':
