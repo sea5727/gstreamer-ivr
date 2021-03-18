@@ -2,7 +2,7 @@ import gi
 gi.require_version('Gst', '1.0')
 from gi.repository import Gst, GLib, GObject
 '''
-gst-launch-1.0 filesrc location=/home/ysh8361/example.ts ! queue ! tsparse set-timestamps=true ! rtpmp2tpay ! .send_rtp_sink_0 rtpbin ! udpsink host=192.168.0.1 port=3000
+filesrc location=/home/ysh8361/example.ts ! queue ! tsparse set-timestamps=true ! rtpmp2tpay ! .send_rtp_sink_0 rtpbin ! udpsink host=192.168.0.1 port=3000
 '''
 
 '''
