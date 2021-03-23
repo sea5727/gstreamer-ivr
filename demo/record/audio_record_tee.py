@@ -4,8 +4,8 @@ from gi.repository import Gst, GLib, GObject
 
 
 PIPELINE_DESC = '''
-audiomixer name=mix ! opusenc ! webmmux ! filesink location=/home/ysh8361/save/bidirectional.webm sync=true 
-audiotestsrc ! audioconvert ! mix. 
+audiomixer name=mix ! opusenc ! webmmux ! filesink location=/home/ysh8361/save/bidirectional.webm 
+sync=true audiotestsrc ! audioconvert ! mix. 
 audiotestsrc wave=9 ! mix.
 '''
 
